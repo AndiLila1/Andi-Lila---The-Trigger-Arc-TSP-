@@ -1,4 +1,4 @@
-"""Strict parser for the UTF-8 instance format described in MESS2024Catania."""
+
 
 from __future__ import annotations
 
@@ -42,7 +42,6 @@ def parse_instance_text(text: str) -> Graph:
         line_no, _ = lines[pos]
         raise ValueError(f"Line {line_no}: unexpected extra record")
     graph = Graph(node_count, tuple(arcs), tuple(relationships))
-    # Relationship triples in the file must agree with the referenced arc indices.
     for i, rel in enumerate(relationships):
         trigger_tail, trigger_head, target_tail, target_head = relationship_endpoints[i]
         trigger, target = graph.arc(rel.trigger_arc), graph.arc(rel.target_arc)
@@ -55,3 +54,4 @@ def parse_instance_text(text: str) -> Graph:
 
 def parse_instance(path: str | Path) -> Graph:
     return parse_instance_text(Path(path).read_text(encoding="utf-8"))
+

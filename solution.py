@@ -1,4 +1,4 @@
-"""Route validation and exact Trigger Arc TSP objective evaluation."""
+
 
 from __future__ import annotations
 
@@ -45,17 +45,15 @@ class CycleEvaluator:
         """
         n = self.node_count
         if not nodes or len(nodes) != n or nodes[0] != 0:
-            return inf  # type: ignore[return-value]
+            return inf
         if not known_permutation and set(nodes) != set(range(n)):
-            return inf  # type: ignore[return-value]
+            return inf
         options = [
             self._arcs_by_endpoints.get((tail, nodes[(i + 1) % n]), ())
             for i, tail in enumerate(nodes)
         ]
         if any(not arcs for arcs in options):
-            return inf  # type: ignore[return-value]
-
-        # Keep the common single-arc case linear and allocation-light.
+            return inf
         if all(len(arcs) == 1 for arcs in options):
             changed_cost: dict[int, int] = {}
             traversed: set[int] = set()
@@ -68,9 +66,6 @@ class CycleEvaluator:
                     if target not in traversed:
                         changed_cost[target] = new_cost
             return total
-
-        # Parallel arc choices can trigger different future costs. Enumerate the
-        # choices exactly for this node cycle and keep its cheapest arc sequence.
         changed_cost: dict[int, int] = {}
         traversed: set[int] = set()
         best = inf
@@ -99,26 +94,38 @@ class CycleEvaluator:
                 traversed.remove(arc.index)
 
         visit(0, 0)
-        return best  # type: ignore[return-value]
+        return best
 
     def evaluate_with_arcs(
         self, nodes: tuple[int, ...] | list[int], *, known_permutation: bool = False
     ) -> tuple[int, tuple[int, ...]]:
         """Return the minimum cost and selected arc IDs for a Hamiltonian node cycle."""
         if not nodes or len(nodes) != self.node_count or nodes[0] != 0:
-            return inf, ()  # type: ignore[return-value]
+            return inf, ()
         if not known_permutation and set(nodes) != set(range(self.node_count)):
-            return inf, ()  # type: ignore[return-value]
+            return inf, ()
 
         options = [
             self._arcs_by_endpoints.get((tail, nodes[(i + 1) % self.node_count]), ())
             for i, tail in enumerate(nodes)
         ]
         if any(not arcs for arcs in options):
-            return inf, ()  # type: ignore[return-value]
+            return inf, ()
         if all(len(arcs) == 1 for arcs in options):
-            selected = tuple(arcs[0].index for arcs in options)
-            return self.evaluate(nodes, known_permutation=True), selected
+           
+            changed_cost: dict[int, int] = {}
+            traversed: set[int] = set()
+            selected: list[int] = []
+            total = 0
+            for arcs in options:
+                arc = arcs[0]
+                total += changed_cost.get(arc.index, arc.cost)
+                traversed.add(arc.index)
+                for target, new_cost in self._by_trigger.get(arc.index, ()):
+                    if target not in traversed:
+                        changed_cost[target] = new_cost
+                selected.append(arc.index)
+            return total, tuple(selected)
 
         changed_cost: dict[int, int] = {}
         traversed: set[int] = set()
@@ -153,7 +160,7 @@ class CycleEvaluator:
                 traversed.remove(arc.index)
 
         visit(0, 0)
-        return best_cost, best_path  # type: ignore[return-value]
+        return best_cost, best_path
 
 
 def evaluate_cycle(graph: Graph, nodes: tuple[int, ...] | list[int]) -> int:
@@ -168,3 +175,4 @@ def make_solution(graph: Graph, nodes: tuple[int, ...] | list[int]) -> Solution:
     evaluator = CycleEvaluator(graph)
     cost, arc_ids = evaluator.evaluate_with_arcs(route, known_permutation=True)
     return Solution(route, cost, arc_ids)
+

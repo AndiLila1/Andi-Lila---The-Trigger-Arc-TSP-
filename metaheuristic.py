@@ -1,4 +1,4 @@
-"""Simulated annealing with trigger-aware 2-opt, swap, and reinsertion moves."""
+
 
 from __future__ import annotations
 
@@ -27,8 +27,6 @@ def _random_cycle(
     if n == 1:
         return (0,) if graph.arc_between(0, 0) else None
     outgoing = graph.outgoing
-    # Randomized backtracking searches until a cycle is found or the run deadline expires.
-    # A fixed attempt budget could incorrectly report that no tour exists in a sparse graph.
     path = [0]
     used = {0}
 
@@ -86,23 +84,27 @@ def solve(graph: Graph, config: SearchConfig | None = None) -> Solution | None:
         if route is None:
             continue
         cost, arc_ids = evaluator.evaluate_with_arcs(route, known_permutation=True)
-        current = Solution(route, cost, arc_ids)
+        current_route = route
+        current_cost = cost
         if best is None or cost < best.cost:
-            best = current
+            best = Solution(current_route, current_cost, arc_ids)
         temperature = max(config.initial_temperature, 1e-9)
         for _step in range(max(0, config.iterations)):
             if deadline is not None and time.monotonic() >= deadline:
                 break
-            candidate_route = _move(current.nodes, rng)
-            candidate_cost, candidate_arcs = evaluator.evaluate_with_arcs(
-                candidate_route, known_permutation=True
-            )
-            delta = candidate_cost - current.cost
+            candidate_route = _move(current_route, rng)
+            candidate_cost = evaluator.evaluate(candidate_route, known_permutation=True)
+            delta = candidate_cost - current_cost
             if delta <= 0 or rng.random() < math.exp(-delta / temperature):
-                current = Solution(candidate_route, candidate_cost, candidate_arcs)
-                if best is None or current.cost < best.cost:
-                    best = current
+                current_route = candidate_route
+                current_cost = candidate_cost
+                if best is None or current_cost < best.cost:
+                    _, best_arc_ids = evaluator.evaluate_with_arcs(
+                        current_route, known_permutation=True
+                    )
+                    best = Solution(current_route, current_cost, best_arc_ids)
             temperature *= config.cooling
             if temperature < 1e-9:
                 temperature = max(config.initial_temperature * 0.05, 1e-9)
     return best
+
