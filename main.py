@@ -1,4 +1,4 @@
-"""Local runner for Trigger Arc TSP instances (not the competition uploader)."""
+
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Exact enumerator for small instances, intended for verification."""
+
 
 from __future__ import annotations
 
