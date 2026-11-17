@@ -25,11 +25,14 @@ def validate_cycle(graph: Graph, nodes: tuple[int, ...] | list[int]) -> bool:
 class CycleEvaluator:
     """Precompiled evaluator reused across the many candidate tours in a search."""
 
-    __slots__ = ("node_count", "_arcs_by_endpoints", "_by_trigger")
+    __slots__ = ("node_count", "_arcs_by_tail", "_by_trigger")
 
     def __init__(self, graph: Graph) -> None:
         self.node_count = graph.node_count
-        self._arcs_by_endpoints = graph._arcs_by_endpoints
+        arcs_by_tail: list[dict[int, tuple]] = [{} for _ in range(self.node_count)]
+        for (tail, head), arcs in graph._arcs_by_endpoints.items():
+            arcs_by_tail[tail][head] = arcs
+        self._arcs_by_tail = tuple(arcs_by_tail)
         trigger_lists: dict[int, list[tuple[int, int]]] = {}
         for relation in graph.relationships:
             trigger_lists.setdefault(relation.trigger_arc, []).append(
@@ -48,13 +51,16 @@ class CycleEvaluator:
             return inf
         if not known_permutation and set(nodes) != set(range(n)):
             return inf
-        options = [
-            self._arcs_by_endpoints.get((tail, nodes[(i + 1) % n]), ())
-            for i, tail in enumerate(nodes)
-        ]
-        if any(not arcs for arcs in options):
-            return inf
-        if all(len(arcs) == 1 for arcs in options):
+        options = []
+        single_arc = True
+        for i, tail in enumerate(nodes):
+            arcs = self._arcs_by_tail[tail].get(nodes[(i + 1) % n], ())
+            if not arcs:
+                return inf
+            if len(arcs) > 1:
+                single_arc = False
+            options.append(arcs)
+        if single_arc:
             changed_cost: dict[int, int] = {}
             traversed: set[int] = set()
             total = 0
@@ -105,13 +111,18 @@ class CycleEvaluator:
         if not known_permutation and set(nodes) != set(range(self.node_count)):
             return inf, ()
 
-        options = [
-            self._arcs_by_endpoints.get((tail, nodes[(i + 1) % self.node_count]), ())
-            for i, tail in enumerate(nodes)
-        ]
-        if any(not arcs for arcs in options):
-            return inf, ()
-        if all(len(arcs) == 1 for arcs in options):
+        options = []
+        single_arc = True
+        for i, tail in enumerate(nodes):
+            arcs = self._arcs_by_tail[tail].get(
+                nodes[(i + 1) % self.node_count], ()
+            )
+            if not arcs:
+                return inf, ()
+            if len(arcs) > 1:
+                single_arc = False
+            options.append(arcs)
+        if single_arc:
            
             changed_cost: dict[int, int] = {}
             traversed: set[int] = set()

@@ -21,12 +21,18 @@ class SearchConfig:
 
 
 def _random_cycle(
-    graph: Graph, rng: random.Random, deadline: float | None = None
+    graph: Graph,
+    rng: random.Random,
+    deadline: float | None = None,
+    outgoing_neighbors: tuple[tuple[int, ...], ...] | None = None,
 ) -> tuple[int, ...] | None:
     n = graph.node_count
     if n == 1:
         return (0,) if graph.arc_between(0, 0) else None
-    outgoing = graph.outgoing
+    if outgoing_neighbors is None:
+        outgoing_neighbors = tuple(
+            tuple(dict.fromkeys(arc.head for arc in row)) for row in graph.outgoing
+        )
     path = [0]
     used = {0}
 
@@ -35,7 +41,7 @@ def _random_cycle(
             return False
         if len(path) == n:
             return graph.arc_between(node, 0) is not None
-        choices = list(dict.fromkeys(arc.head for arc in outgoing[node] if arc.head not in used))
+        choices = [head for head in outgoing_neighbors[node] if head not in used]
         rng.shuffle(choices)
         for nxt in choices:
             path.append(nxt)
@@ -54,20 +60,25 @@ def _move(route: tuple[int, ...], rng: random.Random) -> tuple[int, ...]:
     n = len(route)
     if n < 3:
         return route
-    move = rng.choice(("2opt", "swap", "reinsert"))
-    if move == "2opt":
-        left, right = sorted(rng.sample(range(1, n), 2))
+
+    move = rng.randrange(3)
+    left = rng.randrange(1, n)
+    right = rng.randrange(1, n - 1)
+    if right >= left:
+        right += 1
+
+    if move == 0:
+        if left > right:
+            left, right = right, left
         return route[:left] + tuple(reversed(route[left:right + 1])) + route[right + 1:]
-    if move == "swap":
-        left, right = rng.sample(range(1, n), 2)
+    if move == 1:
         changed = list(route)
         changed[left], changed[right] = changed[right], changed[left]
         return tuple(changed)
 
-    source, destination = rng.sample(range(1, n), 2)
     changed = list(route)
-    node = changed.pop(source)
-    changed.insert(destination, node)
+    node = changed.pop(left)
+    changed.insert(right, node)
     return tuple(changed)
 
 
@@ -77,10 +88,13 @@ def solve(graph: Graph, config: SearchConfig | None = None) -> Solution | None:
     evaluator = CycleEvaluator(graph)
     best: Solution | None = None
     deadline = time.monotonic() + config.seconds if config.seconds is not None else None
+    outgoing_neighbors = tuple(
+        tuple(dict.fromkeys(arc.head for arc in row)) for row in graph.outgoing
+    )
     for _ in range(max(1, config.restarts)):
         if deadline is not None and time.monotonic() >= deadline:
             break
-        route = _random_cycle(graph, rng, deadline)
+        route = _random_cycle(graph, rng, deadline, outgoing_neighbors)
         if route is None:
             continue
         cost, arc_ids = evaluator.evaluate_with_arcs(route, known_permutation=True)
