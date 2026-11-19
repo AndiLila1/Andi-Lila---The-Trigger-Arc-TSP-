@@ -18,6 +18,12 @@ python main.py .\examples\small_instance.txt --seconds 30 --seed 42
 
 Programi e shfaq koston e gjetur, renditjen e nyjave dhe ID-të e harqeve të përdorura. Mundesh me ndryshu kufirin kohor me `--seconds`, ose me përdorë `--iterations` dhe `--restarts` për me kontrollu numrin e iteracioneve dhe rinisjeve.
 
+Shto `--trace` në komandë për ta parë çdo kalim, koston e paguar dhe ndryshimet nga trigger-at:
+
+```powershell
+python main.py .\examples\small_instance.txt --seconds 5 --seed 42 --trace
+```
+
 Për me i ekzekutu testet:
 
 ```powershell
