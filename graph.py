@@ -10,7 +10,7 @@ class Arc:
     index: int
     tail: int
     head: int
-    cost: int
+    cost: int | float
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,7 +18,7 @@ class Relationship:
     index: int
     trigger_arc: int
     target_arc: int
-    new_cost: int
+    new_cost: int | float
 
 
 @dataclass(slots=True)

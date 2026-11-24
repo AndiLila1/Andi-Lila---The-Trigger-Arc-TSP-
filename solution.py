@@ -10,7 +10,7 @@ from graph import Graph
 @dataclass(frozen=True, slots=True)
 class Solution:
     nodes: tuple[int, ...]
-    cost: int
+    cost: int | float
     arc_ids: tuple[int, ...] = ()
 
 
@@ -40,7 +40,7 @@ class CycleEvaluator:
             )
         self._by_trigger = {key: tuple(value) for key, value in trigger_lists.items()}
 
-    def evaluate(self, nodes: tuple[int, ...] | list[int], *, known_permutation: bool = False) -> int:
+    def evaluate(self, nodes: tuple[int, ...] | list[int], *, known_permutation: bool = False) -> int | float:
         """Return infinity for invalid cycles; otherwise score in traversal order.
 
         ``known_permutation`` is reserved for search moves, which preserve the node
@@ -104,7 +104,7 @@ class CycleEvaluator:
 
     def evaluate_with_arcs(
         self, nodes: tuple[int, ...] | list[int], *, known_permutation: bool = False
-    ) -> tuple[int, tuple[int, ...]]:
+    ) -> tuple[int | float, tuple[int, ...]]:
         """Return the minimum cost and selected arc IDs for a Hamiltonian node cycle."""
         if not nodes or len(nodes) != self.node_count or nodes[0] != 0:
             return inf, ()
@@ -174,7 +174,7 @@ class CycleEvaluator:
         return best_cost, best_path
 
 
-def evaluate_cycle(graph: Graph, nodes: tuple[int, ...] | list[int]) -> int:
+def evaluate_cycle(graph: Graph, nodes: tuple[int, ...] | list[int]) -> int | float:
     """Evaluate a cycle in traversal order; only the most recent prior trigger applies."""
     return CycleEvaluator(graph).evaluate(nodes)
 

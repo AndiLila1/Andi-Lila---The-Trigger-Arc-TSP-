@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from graph import Arc, Graph, Relationship
 
@@ -23,18 +24,40 @@ def parse_instance_text(text: str) -> Graph:
             raise ValueError(f"Line {line_no}: {kind} fields must be integers") from exc
         return values, pos + 1
 
+    def take_cost_record(
+        pos: int, integer_fields: int, kind: str
+    ) -> tuple[list[int | float], int]:
+        if pos >= len(lines):
+            raise ValueError(f"Missing {kind} record")
+        line_no, fields = lines[pos]
+        if len(fields) != integer_fields + 1:
+            raise ValueError(
+                f"Line {line_no}: expected {integer_fields + 1} fields for {kind}, got {len(fields)}"
+            )
+        try:
+            values: list[int | float] = [int(field) for field in fields[:-1]]
+            cost = float(fields[-1])
+            if not math.isfinite(cost):
+                raise ValueError("cost must be finite")
+            values.append(int(cost) if cost.is_integer() else cost)
+        except ValueError as exc:
+            raise ValueError(
+                f"Line {line_no}: {kind} IDs and nodes must be integers and cost must be numeric"
+            ) from exc
+        return values, pos + 1
+
     header, pos = take(0, 3, "header")
     node_count, arc_count, relationship_count = header
     if node_count <= 0 or arc_count < 0 or relationship_count < 0:
         raise ValueError("Header counts must be nonnegative and node count must be positive")
     arcs: list[Arc] = []
     for _ in range(arc_count):
-        values, pos = take(pos, 4, "arc")
+        values, pos = take_cost_record(pos, 3, "arc")
         arcs.append(Arc(*values))
     relationships: list[Relationship] = []
     relationship_endpoints: list[tuple[int, int, int, int]] = []
     for _ in range(relationship_count):
-        values, pos = take(pos, 8, "relationship")
+        values, pos = take_cost_record(pos, 7, "relationship")
         rid, trigger_id, trigger_tail, trigger_head, target_id, target_tail, target_head, new_cost = values
         relationships.append(Relationship(rid, trigger_id, target_id, new_cost))
         relationship_endpoints.append((trigger_tail, trigger_head, target_tail, target_head))

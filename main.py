@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from metaheuristic import SearchConfig, solve
+from metaheuristic import GraspConfig, SearchConfig, solve, solve_grasp
 from parser import parse_instance
 
 
@@ -49,6 +49,12 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--restarts", type=int, default=20)
+    parser.add_argument("--algorithm", choices=("sa", "grasp"), default="sa",
+                        help="search algorithm: simulated annealing (sa) or GRASP")
+    parser.add_argument("--grasp-iterations", type=int, default=50,
+                        help="number of GRASP construction and improvement rounds")
+    parser.add_argument("--grasp-alpha", type=float, default=0.25,
+                        help="GRASP restricted-candidate-list randomness, from 0 to 1")
     parser.add_argument("--trace", action="store_true", help="print traversal and trigger changes step by step")
     args = parser.parse_args()
     instance_path = Path(args.instance)
@@ -62,7 +68,23 @@ def main() -> int:
         graph = parse_instance(instance_path)
     except (OSError, UnicodeError, ValueError) as exc:
         parser.error(f"could not read instance '{instance_path}': {exc}")
-    solution = solve(graph, SearchConfig(args.iterations, args.seconds, args.seed, restarts=args.restarts))
+    if args.algorithm == "grasp":
+        solution = solve_grasp(
+            graph,
+            GraspConfig(
+                iterations=args.grasp_iterations,
+                seconds=args.seconds,
+                seed=args.seed,
+                alpha=args.grasp_alpha,
+            ),
+        )
+    else:
+        solution = solve(
+            graph,
+            SearchConfig(
+                args.iterations, args.seconds, args.seed, restarts=args.restarts
+            ),
+        )
     if solution is None:
         print("No feasible Hamiltonian cycle found within the configured search limits.")
         return 2
