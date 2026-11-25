@@ -19,10 +19,10 @@ python main.py .\examples\small_instance.txt --seconds 30 --seed 42
 Për me përdorë GRASP:
 
 ```powershell
-python main.py .\examples\small_instance.txt --algorithm grasp --seconds 10 --seed 42 --grasp-iterations 50 --grasp-alpha 0.25
+python main.py .\examples\small_instance.txt --algorithm grasp --seconds 10 --seed 42 --grasp-iterations 100 --grasp-alpha 0.25
 ```
 
-Te GRASP, `--grasp-iterations` cakton sa cikle ndërton dhe përmirëson, ndërsa `--grasp-alpha` cakton sa rastësi ka në listën e kandidatëve: `0` zgjedh vetëm kandidatët me koston më të ulët fillestare, kurse `1` lejon zgjedhje nga krejt kandidatët. `--seconds` është kufi kohe i përbashkët për kërkimin.
+Te GRASP, `--grasp-iterations` cakton sa cikle ndërton dhe përmirëson, ndërsa GRASP e përdor VND-në për të shqyrtuar 2-opt, swap dhe reinsertion me kosto të trigger-ave të llogaritur saktë. `--grasp-alpha` cakton sa rastësi ka në listën e kandidatëve: `0` zgjedh vetëm kandidatët me koston më të ulët fillestare, kurse `1` lejon zgjedhje nga krejt kandidatët. `--seconds` është kufi kohe i përbashkët për kërkimin.
 
 Programi e shfaq koston e gjetur, renditjen e nyjave dhe ID-të e harqeve të përdorura. Simulated annealing është algoritmi parazgjedhje; `--iterations` dhe `--restarts` e kontrollojnë atë. Për GRASP përdoren `--grasp-iterations` dhe `--grasp-alpha`. Të dy algoritmet e pranojnë `--seconds` dhe `--seed`.
 

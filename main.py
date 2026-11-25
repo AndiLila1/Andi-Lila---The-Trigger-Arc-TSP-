@@ -51,7 +51,7 @@ def main() -> int:
     parser.add_argument("--restarts", type=int, default=20)
     parser.add_argument("--algorithm", choices=("sa", "grasp"), default="sa",
                         help="search algorithm: simulated annealing (sa) or GRASP")
-    parser.add_argument("--grasp-iterations", type=int, default=50,
+    parser.add_argument("--grasp-iterations", type=int, default=100,
                         help="number of GRASP construction and improvement rounds")
     parser.add_argument("--grasp-alpha", type=float, default=0.25,
                         help="GRASP restricted-candidate-list randomness, from 0 to 1")
