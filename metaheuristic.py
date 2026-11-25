@@ -24,11 +24,10 @@ class SearchConfig:
 class GraspConfig:
     """Settings for GRASP construction and local improvement."""
 
-    iterations: int = 50
+    iterations: int = 100
     seconds: float | None = None
     seed: int | None = None
     alpha: float = 0.25
-    stagnation_limit: int = 100
 
 
 def _random_cycle(
@@ -140,7 +139,7 @@ def _greedy_random_cycle(
     deadline: float | None = None,
     outgoing_neighbors: tuple[tuple[int, ...], ...] | None = None,
 ) -> tuple[int, ...] | None:
-    """Build a feasible cycle, randomizing among relatively cheap next nodes."""
+    """Construct a randomized greedy cycle using active trigger costs."""
     n = graph.node_count
     if n == 1:
         return (0,) if graph.arc_between(0, 0) else None
@@ -149,76 +148,133 @@ def _greedy_random_cycle(
             tuple(dict.fromkeys(arc.head for arc in row)) for row in graph.outgoing
         )
 
-    route = [0]
-    used = {0}
+    by_trigger: dict[int, list[tuple[int, int | float]]] = {}
+    for relation in graph.relationships:
+        by_trigger.setdefault(relation.trigger_arc, []).append(
+            (relation.target_arc, relation.new_cost)
+        )
 
-    def visit(node: int) -> bool:
+    route = [0]
+    used_nodes = {0}
+
+    def visit(
+        node: int,
+        traversed_arcs: frozenset[int],
+        active_costs: dict[int, int | float],
+    ) -> bool:
         if deadline is not None and time.monotonic() >= deadline:
             return False
         if len(route) == n:
-            return graph.arc_between(node, 0) is not None
+            return bool(graph.arcs_between(node, 0))
 
-        candidates: list[tuple[int | float, int]] = []
+        candidates: list[tuple[int | float, int, int]] = []
         for nxt in outgoing_neighbors[node]:
-            if nxt in used:
+            if nxt in used_nodes:
                 continue
-            arcs = graph.arcs_between(node, nxt)
-            if arcs:
-                # Initial costs guide construction; the evaluator later accounts
-                # exactly for all trigger changes and parallel-arc choices.
-                candidates.append((min(arc.cost for arc in arcs), nxt))
+            for arc in graph.arcs_between(node, nxt):
+                if arc.index not in traversed_arcs:
+                    candidates.append(
+                        (active_costs.get(arc.index, arc.cost), arc.index, nxt)
+                    )
         if not candidates:
             return False
 
-        low = min(cost for cost, _ in candidates)
-        high = max(cost for cost, _ in candidates)
+        low = min(cost for cost, _, _ in candidates)
+        high = max(cost for cost, _, _ in candidates)
         threshold = low + alpha * (high - low)
-        restricted = [nxt for cost, nxt in candidates if cost <= threshold]
+        restricted = [item for item in candidates if item[0] <= threshold]
         rng.shuffle(restricted)
-        for nxt in restricted:
+
+        for _, arc_id, nxt in restricted:
+            next_traversed = traversed_arcs | {arc_id}
+            next_costs = active_costs.copy()
+            # The chosen arc is considered traversed before its triggers fire.
+            for target_arc, new_cost in by_trigger.get(arc_id, ()):
+                if target_arc not in next_traversed:
+                    next_costs[target_arc] = new_cost
             route.append(nxt)
-            used.add(nxt)
-            if visit(nxt):
+            used_nodes.add(nxt)
+            if visit(nxt, next_traversed, next_costs):
                 return True
-            used.remove(nxt)
+            used_nodes.remove(nxt)
             route.pop()
         return False
 
-    return tuple(route) if visit(0) else None
+    return tuple(route) if visit(0, frozenset(), {}) else None
+
+
+def _grasp_neighborhood(
+    route: tuple[int, ...], neighborhood: int, rng: random.Random
+) -> list[tuple[int, ...]]:
+    """Enumerate one neighborhood: 2-opt, swap, or relocate."""
+    n = len(route)
+    candidates: list[tuple[int, ...]] = []
+    if neighborhood == 0:
+        for left in range(1, n - 1):
+            for right in range(left + 1, n):
+                candidates.append(
+                    route[:left]
+                    + tuple(reversed(route[left:right + 1]))
+                    + route[right + 1:]
+                )
+    elif neighborhood == 1:
+        for left in range(1, n - 1):
+            for right in range(left + 1, n):
+                changed = list(route)
+                changed[left], changed[right] = changed[right], changed[left]
+                candidates.append(tuple(changed))
+    else:
+        for source in range(1, n):
+            for destination in range(1, n):
+                # These insertion points reproduce the original order.
+                if destination == source:
+                    continue
+                changed = list(route)
+                node = changed.pop(source)
+                changed.insert(destination, node)
+                candidates.append(tuple(changed))
+    rng.shuffle(candidates)
+    return candidates
 
 
 def _grasp_local_search(
-    graph: Graph,
     evaluator: CycleEvaluator,
     route: tuple[int, ...],
     rng: random.Random,
-    stagnation_limit: int,
     deadline: float | None = None,
+    evaluation_limit: int | None = None,
 ) -> tuple[int, ...]:
-    """Apply first-improvement 2-opt, swap, and reinsertion moves."""
+    """Run variable-neighborhood descent with exact trigger-aware costs."""
     current_route = route
     current_cost = evaluator.evaluate(current_route, known_permutation=True)
-    no_improvement = 0
-    max_steps = max(stagnation_limit * 25, graph.node_count * graph.node_count * 10)
+    evaluation_limit = evaluation_limit or max(500, 20 * len(route) * len(route))
+    evaluations = 0
+    neighborhood = 0
 
-    for _ in range(max_steps):
-        if no_improvement >= stagnation_limit:
-            break
+    while neighborhood < 3 and evaluations < evaluation_limit:
         if deadline is not None and time.monotonic() >= deadline:
             break
-        candidate = _move(current_route, rng)
-        candidate_cost = evaluator.evaluate(candidate, known_permutation=True)
-        if candidate_cost < current_cost:
-            current_route = candidate
-            current_cost = candidate_cost
-            no_improvement = 0
-        else:
-            no_improvement += 1
+        improved = False
+        for candidate in _grasp_neighborhood(current_route, neighborhood, rng):
+            if evaluations >= evaluation_limit:
+                break
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            candidate_cost = evaluator.evaluate(candidate, known_permutation=True)
+            evaluations += 1
+            if candidate_cost < current_cost:
+                current_route = candidate
+                current_cost = candidate_cost
+                neighborhood = 0
+                improved = True
+                break
+        if not improved:
+            neighborhood += 1
     return current_route
 
 
 def solve_grasp(graph: Graph, config: GraspConfig | None = None) -> Solution | None:
-    """Solve with Greedy Randomized Adaptive Search Procedure (GRASP)."""
+    """Solve with GRASP: trigger-aware randomized construction plus VND."""
     config = config or GraspConfig()
     if not 0.0 <= config.alpha <= 1.0:
         raise ValueError("GRASP alpha must be between 0 and 1")
@@ -236,24 +292,17 @@ def solve_grasp(graph: Graph, config: GraspConfig | None = None) -> Solution | N
         route = _greedy_random_cycle(
             graph, rng, config.alpha, deadline, outgoing_neighbors
         )
-        # The restricted candidate list can dead-end on sparse graphs; fall back
-        # to the complete randomized DFS constructor before declaring failure.
+        # If the restricted candidate list dead-ends, try the complete randomized
+        # constructor so a feasible cycle is not missed on a sparse graph.
         if route is None and (deadline is None or time.monotonic() < deadline):
             route = _random_cycle(graph, rng, deadline, outgoing_neighbors)
         if route is None:
             continue
-        improved_route = _grasp_local_search(
-            graph,
-            evaluator,
-            route,
-            rng,
-            max(1, config.stagnation_limit),
-            deadline,
-        )
+        improved_route = _grasp_local_search(evaluator, route, rng, deadline)
         cost, arc_ids = evaluator.evaluate_with_arcs(
             improved_route, known_permutation=True
         )
-        if cost != float("inf") and (best is None or cost < best.cost):
+        if math.isfinite(cost) and (best is None or cost < best.cost):
             best = Solution(improved_route, cost, arc_ids)
     return best
 

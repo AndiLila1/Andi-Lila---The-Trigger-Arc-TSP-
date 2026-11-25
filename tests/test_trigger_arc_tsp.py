@@ -2,7 +2,7 @@ import unittest
 
 from brute_force import brute_force
 from graph import Arc, Graph, Relationship
-from metaheuristic import SearchConfig, solve
+from metaheuristic import GraspConfig, SearchConfig, solve, solve_grasp
 from parser import parse_instance_text
 from solution import evaluate_cycle, validate_cycle
 
@@ -72,6 +72,26 @@ class TriggerArcTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertGreaterEqual(result.cost, exact.cost)
         self.assertTrue(validate_cycle(graph, result.nodes))
+
+    def test_parser_accepts_decimal_arc_and_trigger_costs(self):
+        graph = parse_instance_text("""3 3 1
+0 0 1 1.5
+1 1 2 10.0
+2 2 0 1.0
+0 0 0 1 1 1 2 2.5
+""")
+        self.assertEqual(evaluate_cycle(graph, (0, 1, 2)), 5.0)
+
+    def test_grasp_returns_valid_cycle_with_evaluator_cost(self):
+        graph = parse_instance_text("""3 3 0
+0 0 1 1
+1 1 2 2
+2 2 0 3
+""")
+        result = solve_grasp(graph, GraspConfig(iterations=3, seed=7))
+        self.assertIsNotNone(result)
+        self.assertTrue(validate_cycle(graph, result.nodes))
+        self.assertEqual(result.cost, evaluate_cycle(graph, result.nodes))
 
 
 if __name__ == "__main__":
