@@ -25,7 +25,7 @@ def validate_cycle(graph: Graph, nodes: tuple[int, ...] | list[int]) -> bool:
 class CycleEvaluator:
     """Precompiled evaluator reused across the many candidate tours in a search."""
 
-    __slots__ = ("node_count", "_arcs_by_tail", "_by_trigger")
+    __slots__ = ("node_count", "_arcs_by_tail", "_by_trigger", "_single_arcs")
 
     def __init__(self, graph: Graph) -> None:
         self.node_count = graph.node_count
@@ -33,6 +33,20 @@ class CycleEvaluator:
         for (tail, head), arcs in graph._arcs_by_endpoints.items():
             arcs_by_tail[tail][head] = arcs
         self._arcs_by_tail = tuple(arcs_by_tail)
+        single_arcs: list[list[object | None]] = [
+            [None] * self.node_count for _ in range(self.node_count)
+        ]
+        has_parallel_arcs = False
+        for (tail, head), arcs in graph._arcs_by_endpoints.items():
+            if len(arcs) == 1:
+                single_arcs[tail][head] = arcs[0]
+            else:
+                has_parallel_arcs = True
+        self._single_arcs = (
+            None
+            if has_parallel_arcs
+            else tuple(tuple(row) for row in single_arcs)
+        )
         trigger_lists: dict[int, list[tuple[int, int]]] = {}
         for relation in graph.relationships:
             trigger_lists.setdefault(relation.trigger_arc, []).append(
@@ -51,6 +65,20 @@ class CycleEvaluator:
             return inf
         if not known_permutation and set(nodes) != set(range(n)):
             return inf
+        if self._single_arcs is not None:
+            changed_cost: dict[int, int | float] = {}
+            traversed: set[int] = set()
+            total: int | float = 0
+            for i, tail in enumerate(nodes):
+                arc = self._single_arcs[tail][nodes[(i + 1) % n]]
+                if arc is None:
+                    return inf
+                total += changed_cost.get(arc.index, arc.cost)
+                traversed.add(arc.index)
+                for target, new_cost in self._by_trigger.get(arc.index, ()):
+                    if target not in traversed:
+                        changed_cost[target] = new_cost
+            return total
         options = []
         single_arc = True
         for i, tail in enumerate(nodes):
@@ -110,6 +138,23 @@ class CycleEvaluator:
             return inf, ()
         if not known_permutation and set(nodes) != set(range(self.node_count)):
             return inf, ()
+
+        if self._single_arcs is not None:
+            changed_cost: dict[int, int | float] = {}
+            traversed: set[int] = set()
+            selected: list[int] = []
+            total: int | float = 0
+            for i, tail in enumerate(nodes):
+                arc = self._single_arcs[tail][nodes[(i + 1) % self.node_count]]
+                if arc is None:
+                    return inf, ()
+                total += changed_cost.get(arc.index, arc.cost)
+                traversed.add(arc.index)
+                for target, new_cost in self._by_trigger.get(arc.index, ()):
+                    if target not in traversed:
+                        changed_cost[target] = new_cost
+                selected.append(arc.index)
+            return total, tuple(selected)
 
         options = []
         single_arc = True
