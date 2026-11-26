@@ -205,36 +205,38 @@ def _greedy_random_cycle(
 
 def _grasp_neighborhood(
     route: tuple[int, ...], neighborhood: int, rng: random.Random
-) -> list[tuple[int, ...]]:
-    """Enumerate one neighborhood: 2-opt, swap, or relocate."""
+):
+    """Yield a randomized neighborhood without materializing every route."""
     n = len(route)
-    candidates: list[tuple[int, ...]] = []
     if neighborhood == 0:
-        for left in range(1, n - 1):
-            for right in range(left + 1, n):
-                candidates.append(
-                    route[:left]
-                    + tuple(reversed(route[left:right + 1]))
-                    + route[right + 1:]
-                )
+        moves = [(left, right) for left in range(1, n - 1) for right in range(left + 1, n)]
+        rng.shuffle(moves)
+        for left, right in moves:
+            yield (
+                route[:left]
+                + tuple(reversed(route[left:right + 1]))
+                + route[right + 1:]
+            )
     elif neighborhood == 1:
-        for left in range(1, n - 1):
-            for right in range(left + 1, n):
-                changed = list(route)
-                changed[left], changed[right] = changed[right], changed[left]
-                candidates.append(tuple(changed))
+        moves = [(left, right) for left in range(1, n - 1) for right in range(left + 1, n)]
+        rng.shuffle(moves)
+        for left, right in moves:
+            changed = list(route)
+            changed[left], changed[right] = changed[right], changed[left]
+            yield tuple(changed)
     else:
-        for source in range(1, n):
-            for destination in range(1, n):
-                # These insertion points reproduce the original order.
-                if destination == source:
-                    continue
-                changed = list(route)
-                node = changed.pop(source)
-                changed.insert(destination, node)
-                candidates.append(tuple(changed))
-    rng.shuffle(candidates)
-    return candidates
+        moves = [
+            (source, destination)
+            for source in range(1, n)
+            for destination in range(1, n)
+            if destination != source
+        ]
+        rng.shuffle(moves)
+        for source, destination in moves:
+            changed = list(route)
+            node = changed.pop(source)
+            changed.insert(destination, node)
+            yield tuple(changed)
 
 
 def _grasp_local_search(
